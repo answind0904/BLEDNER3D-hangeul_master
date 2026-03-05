@@ -1,7 +1,7 @@
 bl_info = {
     "name": "hangeul_master_v1.0_hasw87",
     "author": "hasw87@mbc.co.kr",
-    "version": (27, 0),
+    "version": (1, 0),
     "blender": (4, 0, 0),
     "location": "View3D > Sidebar > Hangeul Edit Tab",
     "description": "한글캐릭터 순차애니메이션 제작을 위한 도구(MBCNewsDesign_하상우)",
@@ -439,4 +439,5 @@ def unregister():
     del bpy.types.Scene.hangeul_v27_tool
 
 if __name__ == "__main__":
+
     register()
