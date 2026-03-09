@@ -1,6 +1,6 @@
 bl_info = {
-    "name": "Hangeul Master V32 (Native Mat Fix)",
-    "author": "Gemini",
+    "name": "Hangeul Master V2",
+    "author": "Hasw87@mbc.co.kr",
     "version": (32, 0),
     "blender": (4, 0, 0),
     "location": "View3D > Sidebar > Hangeul Edit Tab",
@@ -46,7 +46,7 @@ def get_fcurves(anim_data):
 
 # --- 1. 속성 정의 (직관적인 3개 재질 슬롯 추가) ---
 class Hangeul_V32_Props(bpy.types.PropertyGroup):
-    text_input: bpy.props.StringProperty(name="내용", default="네이티브재질", update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
+    text_input: bpy.props.StringProperty(name="내용", default="뉴스디자인", update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
     font_path: bpy.props.StringProperty(name="폰트 선택", subtype='FILE_PATH', update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
     
     anim_factor: bpy.props.FloatProperty(name="진행도", default=1.0, min=0.0, max=1.0, precision=3, update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
@@ -296,3 +296,4 @@ def unregister():
 
 if __name__ == "__main__":
     register()
+
