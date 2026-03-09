@@ -127,7 +127,7 @@ class OT_Hangeul_Create_Mat_V34(bpy.types.Operator):
 
 # --- 2. 속성 정의 ---
 class Hangeul_V34_Props(bpy.types.PropertyGroup):
-    text_input: bpy.props.StringProperty(name="내용", default="베이스라인", update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
+    text_input: bpy.props.StringProperty(name="내용", default="뉴스디자인", update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
     font_path: bpy.props.StringProperty(name="폰트 선택", subtype='FILE_PATH', update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
     
     anim_factor: bpy.props.FloatProperty(name="진행도", default=1.0, min=0.0, max=1.0, precision=3, update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
@@ -359,3 +359,4 @@ def unregister():
 
 if __name__ == "__main__":
     register()
+
