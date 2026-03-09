@@ -276,7 +276,7 @@ class OT_Hangeul_Bake_Anim_V34(bpy.types.Operator):
 
 # --- 5. UI 패널 ---
 class VIEW3D_PT_Hangeul_V34_Panel(bpy.types.Panel):
-    bl_label = "한글 마스터 V34 (Baseline 정렬)"
+    bl_label = "한글 마스터 V2"
     bl_idname = "VIEW3D_PT_hangeul_v34_panel"
     bl_space_type, bl_region_type, bl_category = 'VIEW_3D', 'UI', '한글 편집'
 
@@ -359,4 +359,5 @@ def unregister():
 
 if __name__ == "__main__":
     register()
+
 
