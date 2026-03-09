@@ -44,45 +44,122 @@ def get_fcurves(anim_data):
         except: pass
     return []
 
-# --- 1. 속성 정의 (직관적인 3개 재질 슬롯 추가) ---
-class Hangeul_V32_Props(bpy.types.PropertyGroup):
-    text_input: bpy.props.StringProperty(name="내용", default="뉴스디자인", update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
-    font_path: bpy.props.StringProperty(name="폰트 선택", subtype='FILE_PATH', update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
+# --- 1. 트루 노말 마스킹 재질 자동생성 ---
+class OT_Hangeul_Create_Mat_V34(bpy.types.Operator):
+    bl_idname = "object.hangeul_create_mat_v34"
+    bl_label = "트루 노말 마스킹 재질 자동생성"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def execute(self, context):
+        mat_name = "Hangeul_TrueNormal_Mask"
+        mat = bpy.data.materials.get(mat_name)
+        if not mat:
+            mat = bpy.data.materials.new(name=mat_name)
+            mat.use_nodes = True
+        nodes = mat.node_tree.nodes
+        links = mat.node_tree.links
+        nodes.clear()
+        
+        node_out = nodes.new('ShaderNodeOutputMaterial')
+        node_out.location = (1000, 0)
+        mix_front = nodes.new('ShaderNodeMixShader')
+        mix_front.location = (800, 0)
+        mix_side = nodes.new('ShaderNodeMixShader')
+        mix_side.location = (600, 0)
+        
+        bsdf_front = nodes.new('ShaderNodeBsdfPrincipled')
+        bsdf_front.label = "앞면 (Front/Back)"
+        bsdf_front.location = (400, 300)
+        bsdf_front.inputs['Base Color'].default_value = (1, 0.1, 0.1, 1)
+        
+        bsdf_side = nodes.new('ShaderNodeBsdfPrincipled')
+        bsdf_side.label = "두께 (Side)"
+        bsdf_side.location = (200, -100)
+        bsdf_side.inputs['Base Color'].default_value = (0.1, 1, 0.1, 1)
+        
+        bsdf_bevel = nodes.new('ShaderNodeBsdfPrincipled')
+        bsdf_bevel.label = "베벨 (Bevel)"
+        bsdf_bevel.location = (200, -500)
+        bsdf_bevel.inputs['Base Color'].default_value = (0.1, 0.1, 1, 1)
+
+        geo_node = nodes.new('ShaderNodeNewGeometry')
+        geo_node.location = (-1000, 200)
+        vec_transform = nodes.new('ShaderNodeVectorTransform')
+        vec_transform.vector_type = 'NORMAL'
+        vec_transform.convert_from = 'WORLD'
+        vec_transform.convert_to = 'OBJECT'
+        vec_transform.location = (-800, 200)
+        
+        sep_xyz = nodes.new('ShaderNodeSeparateXYZ')
+        sep_xyz.location = (-600, 200)
+        math_abs = nodes.new('ShaderNodeMath')
+        math_abs.operation = 'ABSOLUTE'
+        math_abs.location = (-400, 200)
+        
+        math_comp_f = nodes.new('ShaderNodeMath')
+        math_comp_f.operation = 'COMPARE'
+        math_comp_f.inputs[1].default_value = 1.0
+        math_comp_f.inputs[2].default_value = 0.05 
+        math_comp_f.location = (-150, 200)
+        
+        math_comp_s = nodes.new('ShaderNodeMath')
+        math_comp_s.operation = 'COMPARE'
+        math_comp_s.inputs[1].default_value = 0.0
+        math_comp_s.inputs[2].default_value = 0.05 
+        math_comp_s.location = (-150, -100)
+
+        links.new(geo_node.outputs['True Normal'], vec_transform.inputs['Vector'])
+        links.new(vec_transform.outputs['Vector'], sep_xyz.inputs['Vector'])
+        links.new(sep_xyz.outputs['Z'], math_abs.inputs[0])
+        links.new(math_abs.outputs[0], math_comp_f.inputs[0])
+        links.new(math_abs.outputs[0], math_comp_s.inputs[0])
+        links.new(bsdf_bevel.outputs[0], mix_side.inputs[1])
+        links.new(bsdf_side.outputs[0], mix_side.inputs[2])
+        links.new(math_comp_s.outputs[0], mix_side.inputs[0])
+        links.new(mix_side.outputs[0], mix_front.inputs[1])
+        links.new(bsdf_front.outputs[0], mix_front.inputs[2])
+        links.new(math_comp_f.outputs[0], mix_front.inputs[0])
+        links.new(mix_front.outputs[0], node_out.inputs['Surface'])
+
+        context.scene.hangeul_v34_tool.mat_main = mat
+        self.report({'INFO'}, "True Normal 마스킹 재질이 생성되었습니다!")
+        return {'FINISHED'}
+
+# --- 2. 속성 정의 ---
+class Hangeul_V34_Props(bpy.types.PropertyGroup):
+    text_input: bpy.props.StringProperty(name="내용", default="베이스라인", update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
+    font_path: bpy.props.StringProperty(name="폰트 선택", subtype='FILE_PATH', update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
     
-    anim_factor: bpy.props.FloatProperty(name="진행도", default=1.0, min=0.0, max=1.0, precision=3, update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
-    overlap: bpy.props.FloatProperty(name="오버래핑", default=0.5, min=0.0, max=0.99, update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
-    ease_intensity: bpy.props.FloatProperty(name="감속 강도", default=3.0, min=0.1, max=10.0, update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
+    anim_factor: bpy.props.FloatProperty(name="진행도", default=1.0, min=0.0, max=1.0, precision=3, update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
+    overlap: bpy.props.FloatProperty(name="오버래핑", default=0.5, min=0.0, max=0.99, update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
+    ease_intensity: bpy.props.FloatProperty(name="감속 강도", default=3.0, min=0.1, max=10.0, update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
     
-    common_x_start: bpy.props.FloatProperty(name="시작 X", default=0.0, update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
-    common_y_start: bpy.props.FloatProperty(name="시작 Y", default=0.0, update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
-    common_z_start: bpy.props.FloatProperty(name="시작 Z", default=2.0, update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
+    common_x_start: bpy.props.FloatProperty(name="시작 X", default=0.0, update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
+    common_y_start: bpy.props.FloatProperty(name="시작 Y", default=0.0, update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
+    common_z_start: bpy.props.FloatProperty(name="시작 Z", default=2.0, update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
     
-    common_rot_x: bpy.props.FloatProperty(name="시작 RX", default=45.0, update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
-    common_rot_y: bpy.props.FloatProperty(name="시작 RY", default=0.0, update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
-    common_rot_z: bpy.props.FloatProperty(name="시작 RZ", default=0.0, update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
+    common_rot_x: bpy.props.FloatProperty(name="시작 RX", default=45.0, update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
+    common_rot_y: bpy.props.FloatProperty(name="시작 RY", default=0.0, update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
+    common_rot_z: bpy.props.FloatProperty(name="시작 RZ", default=0.0, update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
     
-    kerning: bpy.props.FloatProperty(name="자간", default=1.1, min=0.0, update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
-    extrude: bpy.props.FloatProperty(name="두께", default=0.05, min=0.0, update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
-    bevel: bpy.props.FloatProperty(name="베벨", default=0.01, min=0.0, update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
-    outline_offset: bpy.props.FloatProperty(name="외곽선", default=0.0, update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
+    kerning: bpy.props.FloatProperty(name="자간", default=1.1, min=0.0, update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
+    extrude: bpy.props.FloatProperty(name="두께", default=0.05, min=0.0, update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
+    bevel: bpy.props.FloatProperty(name="베벨", default=0.01, min=0.0, update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
+    outline_offset: bpy.props.FloatProperty(name="외곽선", default=0.0, update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
     
-    # 💡 핵심: 부위별 독립적인 마테리얼 슬롯 부활
-    mat_front: bpy.props.PointerProperty(name="앞면 (Front)", type=bpy.types.Material, update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
-    mat_side: bpy.props.PointerProperty(name="옆면 (Side)", type=bpy.types.Material, update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
-    mat_bevel: bpy.props.PointerProperty(name="베벨 (Bevel)", type=bpy.types.Material, update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
-    
-    char_sizes: bpy.props.FloatVectorProperty(name="사이즈", size=20, default=[1.0]*20, update=lambda self, context: bpy.ops.object.hangeul_v32_refresh() if self.is_live else None)
+    mat_main: bpy.props.PointerProperty(name="마스터 재질", type=bpy.types.Material, update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
+    char_sizes: bpy.props.FloatVectorProperty(name="사이즈", size=20, default=[1.0]*20, update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
     is_live: bpy.props.BoolProperty(name="라이브 모드", default=True)
 
-# --- 2. 실행 로직 ---
-class OT_Hangeul_V32_Refresh(bpy.types.Operator):
-    bl_idname = "object.hangeul_v32_refresh"
+# --- 3. 실행 로직 ---
+class OT_Hangeul_V34_Refresh(bpy.types.Operator):
+    bl_idname = "object.hangeul_v34_refresh"
     bl_label = "Refresh"
     bl_options = {'INTERNAL', 'UNDO'}
     
     def execute(self, context):
         global _is_rendering
-        props = context.scene.hangeul_v32_tool
+        props = context.scene.hangeul_v34_tool
         if not props.is_live or _is_rendering: return {'FINISHED'}
             
         p_obj = bpy.data.objects.get("Hangeul_Group")
@@ -99,14 +176,6 @@ class OT_Hangeul_V32_Refresh(bpy.types.Operator):
 
         count = len(props.text_input)
         if count == 0: return {'FINISHED'}
-        
-        # 더미 마테리얼 (빈 슬롯 에러 방지용)
-        dummy_mat = bpy.data.materials.get("Hangeul_Default")
-        if not dummy_mat: dummy_mat = bpy.data.materials.new(name="Hangeul_Default")
-        
-        mat_f = props.mat_front if props.mat_front else dummy_mat
-        mat_s = props.mat_side if props.mat_side else dummy_mat
-        mat_b = props.mat_bevel if props.mat_bevel else dummy_mat
 
         curr_x = 0.0
         for i, char in enumerate(props.text_input):
@@ -120,22 +189,19 @@ class OT_Hangeul_V32_Refresh(bpy.types.Operator):
             raw_f = max(0.0, min(1.0, (props.anim_factor - start_t) / (end_t - start_t) if end_t > start_t else 1.0))
             inv_f = 1.0 - (1.0 - pow(1.0 - raw_f, props.ease_intensity))
 
-            f_curve = bpy.data.curves.new(type="FONT", name=f"HV32_Char_{i}")
+            f_curve = bpy.data.curves.new(type="FONT", name=f"HV34_Char_{i}")
             f_curve.body = char
             if l_font: f_curve.font = l_font
-            f_curve.align_x, f_curve.align_y = 'CENTER', 'BOTTOM'
+            
+            # 💡 핵심 수정: Y 정렬 기준을 바닥(Bottom)이 아닌 기준선(Bottom Baseline)으로 변경
+            f_curve.align_x, f_curve.align_y = 'CENTER', 'BOTTOM_BASELINE'
             f_curve.size = s 
             f_curve.extrude, f_curve.bevel_depth = props.extrude, props.bevel
             f_curve.bevel_resolution, f_curve.offset = 4, props.outline_offset - props.bevel
             
-            # 💡 핵심: 블렌더 텍스트 4-슬롯 법칙 완벽 준수
-            f_curve.materials.clear()
-            f_curve.materials.append(mat_f) # [Index 0] 앞면 (Front)
-            f_curve.materials.append(mat_f) # [Index 1] 뒷면 (Back - 앞면과 동일하게)
-            f_curve.materials.append(mat_s) # [Index 2] 두께 (Extrude/Side)
-            f_curve.materials.append(mat_b) # [Index 3] 베벨 (Bevel)
+            if props.mat_main: f_curve.materials.append(props.mat_main)
             
-            t_obj = bpy.data.objects.new(name=f"HV32_Obj_{i}", object_data=f_curve)
+            t_obj = bpy.data.objects.new(name=f"HV34_Obj_{i}", object_data=f_curve)
             context.collection.objects.link(t_obj)
             
             rot_euler = mathutils.Euler((math.radians(props.common_rot_x * inv_f), math.radians(props.common_rot_y * inv_f), math.radians(props.common_rot_z * inv_f)), 'XYZ')
@@ -149,14 +215,14 @@ class OT_Hangeul_V32_Refresh(bpy.types.Operator):
             t_obj.parent = p_obj
         return {'FINISHED'}
 
-# --- 3. 동기화 베이크 ---
-class OT_Hangeul_Bake_Anim_V32(bpy.types.Operator):
-    bl_idname = "object.hangeul_bake_anim_v32"
+# --- 4. 동기화 베이크 ---
+class OT_Hangeul_Bake_Anim_V34(bpy.types.Operator):
+    bl_idname = "object.hangeul_bake_anim_v34"
     bl_label = "스마트 동기화 베이크 (Mesh 변환)"
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
-        props = context.scene.hangeul_v32_tool
+        props = context.scene.hangeul_v34_tool
         p_obj = bpy.data.objects.get("Hangeul_Group")
         if not p_obj or not p_obj.children: return {'CANCELLED'}
         props.is_live = False
@@ -185,7 +251,7 @@ class OT_Hangeul_Bake_Anim_V32(bpy.types.Operator):
             l_start = (curr_x + props.common_x_start + comp_s.x, props.common_y_start + comp_s.y, props.common_z_start + comp_s.z)
             l_end = (curr_x, 0.0, 0.0)
 
-            t_obj = bpy.data.objects.get(f"HV32_Obj_{i}")
+            t_obj = bpy.data.objects.get(f"HV34_Obj_{i}")
             if t_obj:
                 t_obj.animation_data_clear()
                 for a in range(3):
@@ -202,22 +268,21 @@ class OT_Hangeul_Bake_Anim_V32(bpy.types.Operator):
         bpy.ops.object.select_all(action='DESELECT')
         for child in p_obj.children: child.select_set(True)
         bpy.context.view_layer.objects.active = context.selected_objects[0]
-        # 메쉬 변환 시 네이티브 인덱스가 그대로 면(Face) 속성에 구워집니다.
         bpy.ops.object.convert(target='MESH')
         for obj in context.selected_objects:
             bpy.context.view_layer.objects.active = obj
             bpy.ops.object.shade_smooth_by_angle(angle=math.radians(30))
         return {'FINISHED'}
 
-# --- 4. UI 패널 ---
-class VIEW3D_PT_Hangeul_V32_Panel(bpy.types.Panel):
-    bl_label = "한글 마스터 V32 (완벽 재질)"
-    bl_idname = "VIEW3D_PT_hangeul_v32_panel"
+# --- 5. UI 패널 ---
+class VIEW3D_PT_Hangeul_V34_Panel(bpy.types.Panel):
+    bl_label = "한글 마스터 V34 (Baseline 정렬)"
+    bl_idname = "VIEW3D_PT_hangeul_v34_panel"
     bl_space_type, bl_region_type, bl_category = 'VIEW_3D', 'UI', '한글 편집'
 
     def draw(self, context):
         layout = self.layout
-        props = context.scene.hangeul_v32_tool
+        props = context.scene.hangeul_v34_tool
         
         layout.prop(props, "is_live", toggle=True, icon='PLAY' if props.is_live else 'PAUSE')
         layout.prop(props, "text_input")
@@ -250,15 +315,13 @@ class VIEW3D_PT_Hangeul_V32_Panel(bpy.types.Panel):
         geo.prop(props, "kerning")
         geo.prop(props, "outline_offset")
         
-        # 💡 자동생성 버튼 삭제, 직관적인 3개 슬롯 UI로 변경
         mat = layout.box()
-        mat.label(text="재질 (각 부위별 독립 적용)", icon='MATERIAL')
-        mat.prop(props, "mat_front")
-        mat.prop(props, "mat_side")
-        mat.prop(props, "mat_bevel")
+        mat.label(text="재질", icon='NODE_MATERIAL')
+        mat.operator("object.hangeul_create_mat_v34", text="트루 노말 마스킹 생성", icon='NODE_MATERIAL')
+        mat.prop(props, "mat_main")
         
         layout.separator()
-        layout.operator("object.hangeul_bake_anim_v32", icon='KEYINGSET', text="스마트 동기화 베이크 (메쉬 변환)")
+        layout.operator("object.hangeul_bake_anim_v34", icon='KEYINGSET', text="스마트 동기화 베이크 (메쉬 변환)")
         
         layout.separator()
         layout.label(text="개별 사이즈:")
@@ -270,30 +333,29 @@ class VIEW3D_PT_Hangeul_V32_Panel(bpy.types.Panel):
             item.prop(props, "char_sizes", index=i, text="")
 
 @bpy.app.handlers.persistent
-def hangeul_v32_handler(scene):
+def hangeul_v34_handler(scene):
     try: 
-        if not _is_rendering and hasattr(scene, "hangeul_v32_tool") and scene.hangeul_v32_tool.is_live:
-            bpy.ops.object.hangeul_v32_refresh()
+        if not _is_rendering and hasattr(scene, "hangeul_v34_tool") and scene.hangeul_v34_tool.is_live:
+            bpy.ops.object.hangeul_v34_refresh()
     except: pass
 
-classes = (Hangeul_V32_Props, OT_Hangeul_V32_Refresh, OT_Hangeul_Bake_Anim_V32, VIEW3D_PT_Hangeul_V32_Panel)
+classes = (OT_Hangeul_Create_Mat_V34, Hangeul_V34_Props, OT_Hangeul_V34_Refresh, OT_Hangeul_Bake_Anim_V34, VIEW3D_PT_Hangeul_V34_Panel)
 
 def register():
     for cls in classes: bpy.utils.register_class(cls)
-    bpy.types.Scene.hangeul_v32_tool = bpy.props.PointerProperty(type=Hangeul_V32_Props)
+    bpy.types.Scene.hangeul_v34_tool = bpy.props.PointerProperty(type=Hangeul_V34_Props)
     bpy.app.handlers.render_pre.append(hangeul_render_pre)
     bpy.app.handlers.render_post.append(hangeul_render_post)
     bpy.app.handlers.render_cancel.append(hangeul_render_cancel)
-    bpy.app.handlers.frame_change_post.append(hangeul_v32_handler)
+    bpy.app.handlers.frame_change_post.append(hangeul_v34_handler)
 
 def unregister():
     bpy.app.handlers.render_pre.remove(hangeul_render_pre)
     bpy.app.handlers.render_post.remove(hangeul_render_post)
     bpy.app.handlers.render_cancel.remove(hangeul_render_cancel)
-    bpy.app.handlers.frame_change_post.remove(hangeul_v32_handler)
+    bpy.app.handlers.frame_change_post.remove(hangeul_v34_handler)
     for cls in reversed(classes): bpy.utils.unregister_class(cls)
-    del bpy.types.Scene.hangeul_v32_tool
+    del bpy.types.Scene.hangeul_v34_tool
 
 if __name__ == "__main__":
     register()
-
