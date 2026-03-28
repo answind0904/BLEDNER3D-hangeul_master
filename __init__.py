@@ -149,7 +149,7 @@ class Hangeul_V34_Props(bpy.types.PropertyGroup):
     
     mat_main: bpy.props.PointerProperty(name="마스터 재질", type=bpy.types.Material, update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
     char_sizes: bpy.props.FloatVectorProperty(name="사이즈", size=20, default=[1.0]*20, update=lambda self, context: bpy.ops.object.hangeul_v34_refresh() if self.is_live else None)
-    is_live: bpy.props.BoolProperty(name="라이브 모드", default=True)
+    is_live: bpy.props.BoolProperty(name="라이브 모드", default=False)
 
 # --- 3. 실행 로직 ---
 class OT_Hangeul_V34_Refresh(bpy.types.Operator):
